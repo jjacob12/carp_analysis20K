@@ -268,7 +268,7 @@ class(counts.480)
 ```
 
 ```{r summarise_stats_480cells}
-# plot median genes per cell and expression sum, as above
+# median genes per cell and expression sum, as above
 
 at_least_one.480 <- apply(counts.480, 2, function(x) sum(x>0))
 
