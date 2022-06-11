@@ -12,7 +12,7 @@ options(bitmapType='cairo-png') # this line of code needed BEFORE knitr code in 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(dev = "png",
                       dpi = 300,
-                      echo = FALSE,
+                      echo = TRUE,
                       cache = TRUE)
 ```
 
@@ -51,7 +51,7 @@ class(ons76_2d.data)
 ```{r distrib_detect_genes_stats}
 # Check how many genes have at least one transcript in each cell. 
 
-at_least_one <- apply(ons76_2d.data, 2, function(x) sum(x>0)) # counts the sum of rows that have a                                                                   count value (x > 0) for each column
+at_least_one <- apply(ons76_2d.data, 2, function(x) sum(x>0)) # counts the sum of rows that have a                                                                         count value (x > 0) for each column
 summary(at_least_one)
 
 # summary of total expression per cell. It's high (median total expressn=13,332 genes/cell)
@@ -78,18 +78,32 @@ hist(colSums(ons76_2d.data),                             # total counts (express
 ```
 
 ```{r genesPerCell}
-# manually check the number of genes detected in three or more cells
+# manually check the number of genes (that have transcripts) detected in three or more cells
 # ~14K genes are expressed in at least 3 cells
 # ~22K genes are not expressed in at least 3 cells
 tmp <- apply(ons76_2d.data, 1, function(x) sum(x > 0))
 table(tmp >= 3)
+length(tmp) # for each gene this shows the number of cells that express that gene
 ```
 
 ```{r cells_200genes}
-# all 642 cells have at least 200 expressed genes
-keep <- tmp>=3
-tmp2 <- ons76_2d.data[keep, ]
-dim(tmp2)
+# NOT all 642 cells have at least 200 (common Seurat threshold) expressed genes
+# (min = 36 genes, see below)
+
+keep <- tmp>=3                  # for each gene this states TRUE or FALSE
+
+tmp2 <- ons76_2d.data[keep, ]   # subset ons76_2d.data to keep only TRUE values, i.e. genes which 
+                                # are expressed in 3 or more cells
+
+class(tmp2)                     # this is a matrix
+dim(tmp2)                       # dim is 14655 by 642, as, for example for some genes the 642nd cell may
+                                # be one of the cells expressing that gene
+
+genes_in_3orMoreCells <- apply(tmp2, 2, function(x) sum(x > 0))   # for each cell, this counts the number 
+                                                                  # of genes that cell expresses for all
+                                                                  # genes expressed in 3 or more cells
+
+summary(genes_in_3orMoreCells)
 ```
 
 ```{r Plot_sorted_genesPerCell}
