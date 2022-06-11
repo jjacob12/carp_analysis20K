@@ -1,0 +1,326 @@
+---
+title: "DAOY-2D_Seurat_analysis_20K.Rmd"
+author: "JJ"
+date: "10/06/2022"
+output: html_document
+---
+
+
+```{r graphical_output}
+options(bitmapType='cairo-png') # this line of code needed BEFORE knitr code in chunk below
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = TRUE,   # prints the code (if FALSE then only code output is shown)
+                      cache = TRUE)
+```
+
+```{r libraries}
+library(Seurat)
+library(Matrix)
+library(patchwork)
+library(tidyverse)
+```
+
+```{r path_to_data}
+data_dir <- "./working_data/DAOY-2D/"   # the dot is current dir and is essential!
+
+list.files(data_dir) # should show matrix.mtx.gz, features.tsv.gz, barcodes.tsv.gz
+
+```
+
+```{r read_expression_matrix}
+# note these are .gz files which can be directly read. There are only 199 cells!
+
+daoy_2d.data <- ReadMtx(mtx = paste0(data_dir, "matrix.mtx.gz"),
+                         features = paste0(data_dir, "features.tsv.gz"), 
+                         cells = paste0(data_dir, "barcodes.tsv.gz"))
+
+dim(daoy_2d.data)
+```
+
+```{r data_class}
+class(daoy_2d.data)
+```
+
+```{r distrib_detect_genes_stats}
+# Check how many genes have at least one transcript in each cell. 
+
+at_least_one <- apply(daoy_2d.data, 2, function(x) sum(x>0)) # counts the sum of rows that have a                                                                   count value (x > 0) for each column
+summary(at_least_one)
+
+# summary of total expression per cell. It's high (median total expressn=13,332 genes/cell)
+summary(colSums(daoy_2d.data))
+```
+
+```{r Plots_GenesPerCell, fig.height=10, fig.width=8}
+# median gene expression is higher than in ONS76 cells (around double) 
+#       - is it because DAOY cells are (hyper)tetraploid?
+
+par(mfrow = c(2, 1))
+
+hist(at_least_one, breaks = 100,
+     main = "Distribution of detected genes",
+     xlab = "Genes with at least one transcript")
+
+hist(colSums(daoy_2d.data),                             # total counts (expression) per cell
+     breaks = 100, main = "Expression sum per cell",
+     xlab = "Sum expression")
+
+```
+
+```{r genesPerCell}
+# manually check the number of genes detected in three or more cells
+# ~16K genes are expressed in at least 3 cells
+# ~20K genes are not expressed in at least 3 cells
+tmp <- apply(daoy_2d.data, 1, function(x) sum(x > 0))
+table(tmp >= 3)
+```
+
+```{r cells_200genes}
+# Do all 199 cells have at least 200 expressed genes? Ans = NO! Min. genes = 99
+
+keep <- tmp>=3                  # for each gene this states TRUE or FALSE
+
+tmp2 <- daoy_2d.data[keep, ]    # subset daoy_2d.data to keep only TRUE values, i.e. genes which 
+                                # are expressed in 3 or more cells
+
+class(tmp2)                     # this is a matrix
+dim(tmp2)                       # dim is 14655 by 642, as, for example for some genes the 642nd cell may
+                                # be one of the cells expressing that gene
+
+genes_in_3orMoreCells <- apply(tmp2, 2, function(x) sum(x > 0))   # for each cell, this counts the number 
+                                                                  # of genes that cell expresses for all
+                                                                  # genes expressed in 3 or more cells
+
+summary(genes_in_3orMoreCells)
+```
+
+```{r Plot_sorted_genesPerCell}
+# rank each cell by its library complexity, i.e. number of genes detected per cell
+
+genes_per_cell <- Matrix::colSums(daoy_2d.data > 0) # count gene only if it has non-zero reads                                                             mapped.
+
+plot(sort(genes_per_cell), 
+     xlab='cell',
+     ylab = "sorted genes per cell",
+     log = "y",                             # only y axis is logarithmic
+     main='Genes per cell (ordered)') 
+```
+
+```{r create_seurat_object}
+
+daoy.2d.seurat <- CreateSeuratObject(counts = daoy_2d.data, 
+                                    min.cells = 3, 
+                                    min.genes = 200, 
+                                    project = "DAOY-2D")
+dim(daoy.2d.seurat)
+```
+
+```{r access_seurat_metadata}
+# nCount_RNA = number of UMIs per cell
+# nFeature_RNA = number of genes per cell
+
+head(daoy.2d.seurat@meta.data)
+```
+
+```{r add_percent_mitochondria_meta.data}
+# mitochondrial percentage
+daoy.2d.seurat[["percent.mt"]] <- PercentageFeatureSet(daoy.2d.seurat, pattern = "^MT-")
+head(daoy.2d.seurat@meta.data)
+```
+
+```{r metadata_dataframe_199cells}
+# create metadata dataframe
+metadata <- daoy.2d.seurat@meta.data
+
+# Add cell IDs to metadata
+metadata$cells <- rownames(metadata)
+
+# Rename columns to be more intuitive
+metadata <- metadata %>%
+        dplyr::rename(sample = orig.ident,
+                      nUMI = nCount_RNA,
+                      nGene = nFeature_RNA)
+dim(metadata)
+```
+
+```{r violinPlot_genes_transcripts_percent.mt_199cells, fig.height=10, fig.width=5}
+# there are some cells with excessive mitochondrial transcripts
+# the data looks bimodal, smaller lower 'bulge'
+
+p1 <- metadata %>% 
+        ggplot(aes(x = sample, y = nUMI)) +
+        geom_violin(colour = "blue", fill = "blue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.2)
+
+p2 <- metadata %>% 
+        ggplot(aes(x = sample, y = nGene)) +
+        geom_violin(colour = "brown1", fill = "brown1", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.2)
+
+p3 <- metadata %>% 
+        ggplot(aes(x = sample, y = percent.mt)) +
+        geom_violin(colour = "cadetblue", fill = "cadetblue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.2)
+
+p1 / p2 / p3    
+                       
+```
+
+```{r Plot_UMIcountsPerCell_199cells}
+
+# visualise number of UMIs (transcripts) per cell using all 642 cells. 
+# In geom_density use (y = ..scaled..) value that stat_density provides
+metadata %>% 
+        ggplot(aes(x = nUMI)) +
+        geom_density(aes(y = ..scaled..)) +
+        scale_x_log10() +
+        theme_classic() +
+        ylab("cell density") +
+        geom_vline(xintercept = 500, color = "blue")
+```
+
+```{r mitochondrial_thresholds}
+# number of cells with percent.mt > 10%: 12 cells
+# number of cells with percent.mt < 10%: 187 cells
+
+nrow(metadata[metadata$percent.mt > 10, ])
+
+nrow(metadata[metadata$percent.mt < 10, ])
+```
+
+
+```{r filtered_seuratObject}
+# remove cells with percent mitochondrial gene expression > 10, i.e. remove 12 cells
+
+filtered_daoy.2d.seurat <- subset(daoy.2d.seurat, subset = nFeature_RNA > 200 & percent.mt < 10)
+dim(filtered_daoy.2d.seurat)
+```
+
+```
+# saved the filtered seurat object to outputs20K folder
+
+saveRDS(filtered_daoy.2d.seurat, file = "./outputs20K/filtered.daoy.2d.seurat.rds")
+```
+
+```{r load_filtered_seuratObject}
+filtered.daoy.2d.seurat <- readRDS(file = "outputs20K/filtered.daoy.2d.seurat.rds")
+```
+
+```{r violinPlot_genes_transcripts_percent.mt_480cells, fig.height=10, fig.width=5}
+# create a metadata dataframe
+# new plots show the nUMI plot upper 'bulge' is still present. What is that - multiplets
+
+metadata.2 <- filtered.daoy.2d.seurat@meta.data
+
+# Add cell IDs to metadata
+metadata.2$cells <- rownames(metadata.2)
+
+# Rename columns to be more intuitive
+metadata.2 <- metadata.2 %>%
+        dplyr::rename(sample = orig.ident,
+                      nUMI = nCount_RNA,
+                      nGene = nFeature_RNA)
+
+p4 <- metadata.2 %>% 
+        ggplot(aes(x = sample, y = nUMI)) +
+        geom_violin(colour = "blue", fill = "blue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.2)
+
+p5 <- metadata.2 %>% 
+        ggplot(aes(x = sample, y = nGene)) +
+        geom_violin(colour = "brown1", fill = "brown1", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.2)
+
+p6 <- metadata.2 %>% 
+        ggplot(aes(x = sample, y = percent.mt)) +
+        ylim(0, 100) +
+        geom_violin(colour = "cadetblue", fill = "cadetblue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.2)
+
+p4 / p5 / p6
+
+```
+
+```{r extract_countsSlot_187cells}
+# subset '@counts' slot (matrix) of filtered seurat object
+
+counts.187<- GetAssayData(object = filtered.daoy.2d.seurat, slot = "counts")
+counts.187[1:6, 1:3]
+```
+
+```{r summarise_stats_187cells}
+# median genes per cell and expression sum, as above. Min. genes = 518
+
+at_least_one.187 <- apply(counts.187, 2, function(x) sum(x>0))
+
+summary(at_least_one.187)
+
+summary(colSums(counts.187))
+```
+
+```{r Plots_GenesPerCell_187cells, fig.height=10, fig.width=8}
+# only 1 peak now, not bi-modal. There are cells to the right of each graph which look
+# like outliers - very high gene expression.
+
+par(mfrow = c(2, 1))
+
+hist(at_least_one.187, breaks = 100,
+     main = "Distribution of detected genes",
+     xlab = "Genes with at least one transcript")
+
+hist(colSums(counts.187),                             # total counts (expression) per cell
+     breaks = 100, main = "Expression sum per cell",
+     xlab = "Sum expression")
+```
+
+```{r Plots_UMI_gene_expression_187cells, fig.height=10, fig.width=5}
+p7 <- metadata.2 %>% 
+       ggplot(aes(x = nUMI)) +
+        geom_density(aes(y = ..scaled..), colour = "blue", fill = "blue", alpha = 0.2) +
+        theme_classic() +
+        scale_x_log10() +
+        ylab("Cell density")
+
+p8 <- metadata.2 %>% 
+        ggplot(aes(x = nGene)) +
+        geom_density(aes(y = ..scaled..), colour = "brown1", fill = "brown1", alpha = 0.2) +
+        theme_classic() +
+        scale_x_log10() +
+        ylab("Cell density")
+
+p7 / p8
+        
+```
+
+```{r Plot_mitoch_transcript_genes_187cells, fig.height=8, fig.width=6}
+# use ggplot adjustable parameters, e.g. ylim() to change the y-axis scale from the Seurat default
+
+p9 <- FeatureScatter(filtered.daoy.2d.seurat, 
+                     feature1 = "nCount_RNA", 
+                     feature2 = "percent.mt") +
+        ylim(0, 100)
+
+p10 <- FeatureScatter(filtered.daoy.2d.seurat, 
+                      feature1 = "nCount_RNA",
+                      feature2 = "nFeature_RNA")
+
+p9 / p10
+
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
