@@ -79,7 +79,7 @@ tmp <- apply(daoy_2d.data, 1, function(x) sum(x > 0))
 table(tmp >= 3)
 ```
 
-```{r cells_200genes}
+```{r cells_gene_counts}
 # Do all 199 cells have at least 200 expressed genes? Ans = NO! Min. genes = 99
 
 keep <- tmp>=3                  # for each gene this states TRUE or FALSE
@@ -88,7 +88,7 @@ tmp2 <- daoy_2d.data[keep, ]    # subset daoy_2d.data to keep only TRUE values, 
                                 # are expressed in 3 or more cells
 
 class(tmp2)                     # this is a matrix
-dim(tmp2)                       # dim is 14655 by 642, as, for example for some genes the 642nd cell may
+dim(tmp2)                       # dim is 16208 by 199, as, for example for some genes the 199th cell may
                                 # be one of the cells expressing that gene
 
 genes_in_3orMoreCells <- apply(tmp2, 2, function(x) sum(x > 0))   # for each cell, this counts the number 
@@ -213,7 +213,7 @@ saveRDS(filtered_daoy.2d.seurat, file = "./outputs20K/filtered.daoy.2d.seurat.rd
 filtered.daoy.2d.seurat <- readRDS(file = "outputs20K/filtered.daoy.2d.seurat.rds")
 ```
 
-```{r violinPlot_genes_transcripts_percent.mt_480cells, fig.height=10, fig.width=5}
+```{r violinPlot_genes_transcripts_percent.mt_187cells, fig.height=10, fig.width=5}
 # create a metadata dataframe
 # new plots show the nUMI plot upper 'bulge' is still present. What is that - multiplets
 
