@@ -1,0 +1,362 @@
+---
+title: "CBO_Seurat_analysis_20K_QC.Rmd"
+author: "JJ"
+date: "12/06/2022"
+output: html_document
+---
+
+```{r graphical_output}
+options(bitmapType='cairo-png') # this line of code needed BEFORE knitr code in chunk below
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = TRUE,   # prints the code (if FALSE then only code output is shown)
+                      cache = TRUE)
+```
+
+```{r libraries}
+library(Seurat)
+library(Matrix)
+library(patchwork)
+library(tidyverse)
+```
+
+```{r path_to_data}
+data_dir <- "./working_data/CBO/"   # the dot is current dir and is essential!
+
+list.files(data_dir) # should show matrix.mtx.gz, features.tsv.gz, barcodes.tsv.gz
+
+```
+
+```{r read_expression_matrix}
+# note these are .gz files which can be directly read. There are only 199 cells!
+
+cbo.data <- ReadMtx(mtx = paste0(data_dir, "matrix.mtx.gz"),
+                         features = paste0(data_dir, "features.tsv.gz"), 
+                         cells = paste0(data_dir, "barcodes.tsv.gz"))
+
+dim(cbo.data)
+```
+
+```{r data_class}
+class(cbo.data)
+```
+
+```{r distrib_detect_genes_stats}
+# Check how many genes have at least one transcript in each cell.
+# Minimum genes per cell is 61
+
+at_least_one <- apply(cbo.data, 2, function(x) sum(x>0)) # counts the sum of rows that have a                                                                        count value (x > 0) for each column
+summary(at_least_one)
+
+# summary of total expression per cell.
+summary(colSums(cbo.data))
+```
+
+```{r Plots_GenesPerCell, fig.height=10, fig.width=8}
+
+par(mfrow = c(2, 1))
+
+hist(at_least_one, breaks = 100,
+     main = "Distribution of detected genes",
+     xlab = "Genes with at least one transcript")
+
+hist(colSums(cbo.data),                             # total counts (expression) per cell
+     breaks = 100, main = "Expression sum per cell",
+     xlab = "Sum expression")
+
+```
+
+```{r genesPerCell}
+# manually check the number of genes detected in three or more cells
+# ~20K genes are expressed in at least 3 cells
+# ~16K genes are not expressed in at least 3 cells
+tmp <- apply(cbo.data, 1, function(x) sum(x > 0))
+table(tmp >= 3)
+```
+
+```{r cells_gene_counts}
+# Do all 3729 cells have at least 200 expressed genes? Ans = NO! Min. genes = 61
+
+keep <- tmp>=3                  # for each gene this states TRUE or FALSE
+
+tmp2 <- cbo.data[keep, ]        # subset cbo.data to keep only TRUE values, i.e. genes which 
+                                # are expressed in 3 or more cells
+
+class(tmp2)                     # this is a matrix
+dim(tmp2)                       # dim is 20479 by 3729, as, for example for some genes the 3729th cell may
+                                # be one of the cells expressing that gene
+
+genes_in_3orMoreCells <- apply(tmp2, 2, function(x) sum(x > 0))   # for each cell, this counts the number 
+                                                                  # of genes that cell expresses for all
+                                                                  # genes expressed in 3 or more cells
+
+summary(genes_in_3orMoreCells)
+```
+
+```{r Plot_sorted_genesPerCell}
+# rank each cell by its library complexity, i.e. number of genes detected per cell
+
+genes_per_cell <- Matrix::colSums(cbo.data > 0) # count gene only if it has non-zero reads                                                                   mapped.
+
+plot(sort(genes_per_cell), 
+     xlab='cell',
+     ylab = "sorted genes per cell",
+     log = "y",                             # only y axis is logarithmic
+     main='Genes per cell (ordered)') 
+```
+
+```{r create_seurat_object}
+
+cbo.seurat <- CreateSeuratObject(counts = cbo.data, 
+                                    min.cells = 3, 
+                                    min.genes = 200, 
+                                    project = "CBO")
+dim(cbo.seurat)
+```
+
+```{r access_seurat_metadata}
+# nCount_RNA = number of UMIs per cell
+# nFeature_RNA = number of genes per cell
+
+head(cbo.seurat@meta.data)
+```
+
+```{r add_percent_mitochondria_meta.data}
+# mitochondrial percentage
+cbo.seurat[["percent.mt"]] <- PercentageFeatureSet(cbo.seurat, pattern = "^MT-")
+head(cbo.seurat@meta.data)
+```
+
+```{r metadata_dataframe_199cells}
+# create metadata dataframe
+metadata <- cbo.seurat@meta.data
+
+# Add cell IDs to metadata
+metadata$cells <- rownames(metadata)
+
+# Rename columns to be more intuitive
+metadata <- metadata %>%
+        dplyr::rename(sample = orig.ident,
+                      nUMI = nCount_RNA,
+                      nGene = nFeature_RNA)
+dim(metadata)
+```
+
+```{r violinPlot_genes_transcripts_percent.mt_3729cells, fig.height=10, fig.width=5}
+# there are many cells with excessive mitochondrial transcripts
+# the data looks bimodal, 'bulges' in the violin plots are more similar in size vs ONS76-2D and DAOY-2D
+
+p1 <- metadata %>% 
+        ggplot(aes(x = sample, y = nUMI)) +
+        geom_violin(colour = "blue", fill = "blue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.1)
+
+p2 <- metadata %>% 
+        ggplot(aes(x = sample, y = nGene)) +
+        geom_violin(colour = "brown1", fill = "brown1", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.1)
+
+p3 <- metadata %>% 
+        ggplot(aes(x = sample, y = percent.mt)) +
+        geom_violin(colour = "cadetblue", fill = "cadetblue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.1)
+
+p1 / p2 / p3    
+                       
+```
+
+```{r Plot_UMIcountsPerCell_199cells}
+
+# visualise number of UMIs (transcripts) per cell using all 3729 cells. 
+# In geom_density use (y = ..scaled..) value that stat_density provides
+
+metadata %>% 
+        ggplot(aes(x = nUMI)) +
+        geom_density(aes(y = ..scaled..)) +
+        scale_x_log10() +
+        theme_classic() +
+        ylab("cell density") +
+        geom_vline(xintercept = 500, color = "blue")
+```
+
+```{r mitochondrial_thresholds}
+# number of cells with percent.mt > 10%: 971 cells
+# number of cells with percent.mt < 10%: 2758 cells
+
+nrow(metadata[metadata$percent.mt > 10, ])
+
+nrow(metadata[metadata$percent.mt < 10, ])
+```
+
+```{r filtered_seuratObject}
+# remove cells with percent mitochondrial gene expression > 10 and where no.genes/cell < 200.
+# left with 2757 cells
+
+filtered_cbo.seurat <- subset(cbo.seurat, subset = nFeature_RNA > 200 & percent.mt < 10)
+dim(filtered_cbo.seurat)
+```
+
+```
+# saved the filtered seurat object to outputs20K folder
+
+saveRDS(filtered_cbo.seurat, file = "./outputs20K/filtered.cbo.seurat.rds")
+```
+
+```{r load_filtered_seuratObject}
+filtered.cbo.seurat <- readRDS(file = "outputs20K/filtered.cbo.seurat.rds")
+```
+
+```{r violinPlot_genes_transcripts_percent.mt_2757cells, fig.height=10, fig.width=5}
+# create a metadata dataframe
+# new plots show 
+
+metadata.2 <- filtered.cbo.seurat@meta.data
+
+# Add cell IDs to metadata
+metadata.2$cells <- rownames(metadata.2)
+
+# Rename columns to be more intuitive
+metadata.2 <- metadata.2 %>%
+        dplyr::rename(sample = orig.ident,
+                      nUMI = nCount_RNA,
+                      nGene = nFeature_RNA)
+
+p4 <- metadata.2 %>% 
+        ggplot(aes(x = sample, y = nUMI)) +
+        geom_violin(colour = "blue", fill = "blue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.1)
+
+p5 <- metadata.2 %>% 
+        ggplot(aes(x = sample, y = nGene)) +
+        geom_violin(colour = "brown1", fill = "brown1", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.1)
+
+p6 <- metadata.2 %>% 
+        ggplot(aes(x = sample, y = percent.mt)) +
+        ylim(0, 100) +
+        geom_violin(colour = "cadetblue", fill = "cadetblue", alpha = 0.1) +
+        theme_classic() +
+        geom_jitter(alpha = 0.1)
+
+p4 / p5 / p6
+
+```
+
+```{r extract_countsSlot_2757cells}
+# subset '@counts' slot (matrix) of filtered seurat object
+
+counts.2757 <- GetAssayData(object = filtered.cbo.seurat, slot = "counts")
+counts.2757[1:6, 1:3]
+```
+
+```{r summarise_stats_2757cells}
+# median genes per cell and expression sum, as above. Min. genes = 238
+
+at_least_one.2757 <- apply(counts.2757, 2, function(x) sum(x>0))
+
+summary(at_least_one.2757)
+
+summary(colSums(counts.2757))
+```
+
+```{r Plots_GenesPerCell_2757cells, fig.height=10, fig.width=8}
+# 1 major peak now, but still a group of cells to the left with lower gene expression. 
+# There are cells in the tail to the right of each graph which look like outliers with 
+# very high gene expression.
+
+par(mfrow = c(2, 1))
+
+hist(at_least_one.2757, breaks = 100,
+     main = "Distribution of detected genes",
+     xlab = "Genes with at least one transcript")
+
+hist(colSums(counts.2757),                             # total counts (expression) per cell
+     breaks = 100, main = "Expression sum per cell",
+     xlab = "Sum expression")
+```
+
+```{r Plots_UMI_gene_expression_2757cells, fig.height=10, fig.width=5}
+
+# looks ok, most of the filtered CBO cells have UMI counts > 3000 and express 1000-3000 genes
+
+p7 <- metadata.2 %>% 
+       ggplot(aes(x = nUMI)) +
+        geom_density(aes(y = ..scaled..), colour = "blue", fill = "blue", alpha = 0.2) +
+        theme_classic() +
+        scale_x_log10() +
+        ylab("Cell density")
+
+p8 <- metadata.2 %>% 
+        ggplot(aes(x = nGene)) +
+        geom_density(aes(y = ..scaled..), colour = "brown1", fill = "brown1", alpha = 0.2) +
+        theme_classic() +
+        scale_x_log10() +
+        ylab("Cell density")
+
+p7 / p8
+        
+```
+
+```{r Plot_mitoch_transcript_genes_2757cells, fig.height=8, fig.width=6}
+# use ggplot adjustable parameters, e.g. ylim() to change the y-axis scale from the Seurat default
+
+p9 <- FeatureScatter(filtered.cbo.seurat, 
+                     feature1 = "nCount_RNA", 
+                     feature2 = "percent.mt") +
+        ylim(0, 100)
+
+p10 <- FeatureScatter(filtered.cbo.seurat, 
+                      feature1 = "nCount_RNA",
+                      feature2 = "nFeature_RNA")
+
+p9 / p10
+
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
