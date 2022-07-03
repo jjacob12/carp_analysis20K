@@ -318,6 +318,124 @@ p9 / p10
 
 ```
 
+```{r LogNormalise}
+# use the LogNormalise method in Seurat to normalise the filtered dataset with default Seurat
+# parameters
+filtered.daoy.2d.seurat <- NormalizeData(filtered.daoy.2d.seurat)
+```
+
+```{r FindVarFeatures}
+filtered.daoy.2d.seurat <- FindVariableFeatures(filtered.daoy.2d.seurat, selection.method = "vst", nfeatures = 2000)
+```
+
+```{r plot_variableFeatures, fig.height=10, fig.width=6}
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(filtered.daoy.2d.seurat), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(filtered.daoy.2d.seurat)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 / plot2
+```
+
+```{r apply_ScaleData}
+# scale the data
+all.genes <- rownames(filtered.daoy.2d.seurat)
+filtered.daoy.2d.seurat <- ScaleData(filtered.daoy.2d.seurat, features = all.genes)
+```
+
+```{r RunPCA}
+# apply linear dimension reduction
+filtered.daoy.2d.seurat <- RunPCA(filtered.daoy.2d.seurat, features = VariableFeatures(object = filtered.daoy.2d.seurat))
+```
+
+```{r plot_PCA}
+DimPlot(filtered.daoy.2d.seurat, reduction = "pca")
+```
+```{r}
+# Running UMAP clustering did not work on the 'filtered.daoy.2d.seurat' object as error message stated there was no PCA data in the object, so the UMAP plots were performed on the seurat object that  contains the PCA data
+```
+
+``` dataset_dimensionality
+# Jack Straw plot to find PCs with low p-values
+filtered.daoy.2d.seurat <- JackStraw(filtered.daoy.2d.seurat, num.replicate = 100)
+filtered.daoy.2d.seurat <- ScoreJackStraw(filtered.daoy.2d.seurat, dims = 1:20)
+```
+
+``` plot_JackStraw
+JackStrawPlot(filtered.daoy.2d.seurat, dims = 1:15)
+```
+
+```{r ElbowPlot}
+# not that useful, too many (9 - 10) PCs look signficant
+ElbowPlot(filtered.daoy.2d.seurat)
+```
+
+
+```save_filtered-daoy-object
+# saved filename of filtered Seurat object includes 'js' as that object contains 
+# results of JackStraw score
+
+saveRDS(filtered_daoy.2d.seurat, file = "./outputs20K/filtered.daoy.2d.js.seurat.rds")
+```
+
+```
+filtered.daoy.2d.seurat <- readRDS("outputs20K/filtered.daoy.2d.js.seurat.rds")
+```
+
+```{r plotUMAPclusters_res0.2}
+# try resolution = 0.2
+filtered.daoy.2d.seurat <- FindNeighbors(filtered.daoy.2d.seurat, dims = 1:10)
+filtered.daoy.2d.seurat <- FindClusters(filtered.daoy.2d.seurat, resolution = 0.2)
+filtered.daoy.2d.seurat <- RunUMAP(filtered.daoy.2d.seurat, dims = 1:10)
+DimPlot(filtered.daoy.2d.seurat)
+```
+
+```{r plotUMAPclusters_res0.4}
+# try resolution = 0.4
+filtered.daoy.2d.seurat <- FindNeighbors(filtered.daoy.2d.seurat, dims = 1:10)
+filtered.daoy.2d.seurat <- FindClusters(filtered.daoy.2d.seurat, resolution = 0.4)
+filtered.daoy.2d.seurat <- RunUMAP(filtered.daoy.2d.seurat, dims = 1:10)
+DimPlot(filtered.daoy.2d.seurat)
+```
+
+```{r plotUMAPclusters_res0.6}
+# try resolution = 0.6
+filtered.daoy.2d.seurat <- FindNeighbors(filtered.daoy.2d.seurat, dims = 1:10)
+filtered.daoy.2d.seurat <- FindClusters(filtered.daoy.2d.seurat, resolution = 0.6)
+filtered.daoy.2d.seurat <- RunUMAP(filtered.daoy.2d.seurat, dims = 1:10)
+DimPlot(filtered.daoy.2d.seurat)
+```
+
+```{r plotUMAPclusters_res0.8}
+# try resolution = 0.8
+filtered.daoy.2d.seurat <- FindNeighbors(filtered.daoy.2d.seurat, dims = 1:10)
+filtered.daoy.2d.seurat <- FindClusters(filtered.daoy.2d.seurat, resolution = 0.8)
+filtered.daoy.2d.seurat <- RunUMAP(filtered.daoy.2d.seurat, dims = 1:10)
+DimPlot(filtered.daoy.2d.seurat)
+```
+
+```{r plotUMAPclusters_res1.0}
+# try resolution = 1.0 - these clusterings are meaningless as more clusters are found at 
+# higher resolution
+filtered.daoy.2d.seurat <- FindNeighbors(filtered.daoy.2d.seurat, dims = 1:10)
+filtered.daoy.2d.seurat <- FindClusters(filtered.daoy.2d.seurat, resolution = 1.0)
+filtered.daoy.2d.seurat <- RunUMAP(filtered.daoy.2d.seurat, dims = 1:10)
+DimPlot(filtered.daoy.2d.seurat)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 ```{r}
 sessionInfo()
 ```
