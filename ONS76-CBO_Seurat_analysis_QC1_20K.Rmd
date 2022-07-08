@@ -74,7 +74,7 @@ table(tmp >= 3)
 ```
 
 ```{r cells_gene_counts}
-# Do all 761 cells have at least 200 expressed genes? Ans = NO! Min. genes = 67
+# Do all 3321 cells have at least 200 expressed genes? Ans = NO! Min. genes = 108
 
 keep <- tmp>=3                       # for each gene this states TRUE or FALSE
 
@@ -132,7 +132,7 @@ dim(metadata)
 ```
 
 ```{r violinPlot_genes_transcripts_percent.mt_3321cells, fig.height=10, fig.width=5}
-# there are some cells with excessive mitochondrial transcripts
+# there are a lot of cells with excessive mitochondrial transcripts
 # the data looks bimodal for nGene
 # lot of cells have excessive mitochondrial gene expression
 
