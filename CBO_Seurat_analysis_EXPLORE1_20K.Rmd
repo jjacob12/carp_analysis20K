@@ -84,7 +84,7 @@ saveRDS(cbo, file = "./outputs20K/cbo.clusters.seurat.rds")
 cbo <- readRDS("outputs20K/cbo.clusters.seurat.rds")
 ```
 
-```{r save_metadata}
+```{r load_metadata}
 # view the first few rows of the 'cbo_metadata.csv' file
 cbo.metadataCSV <- read.csv("outputs20K/cbo_metadata.csv")
 
@@ -117,17 +117,17 @@ setNames(lapply(levels(cbo$cluster_names), function(x) {
 # must express the gene, only find upregulated genes
 
 cluster.markers <- FindAllMarkers(cbo, min.pct = 0.25, only.pos = TRUE)
-View(cluster.markers)
+
 ```
 
 ```
 # saved the cluster.markers object as csv file
 
-write.csv(cluster.markers, "./outputs20K/cluster_markers.csv", quote = F)
+write.csv(cluster.markers, "./outputs20K/cbo.cluster_markers.csv", quote = F)
 ```
 
 ```{r load_cluster-markers}
-cluster.markers <- read.csv("outputs20K/cluster_markers.csv", header = TRUE, stringsAsFactors = FALSE)
+cluster.markers <- read.csv("outputs20K/cbo.cluster_markers.csv", header = TRUE, stringsAsFactors = FALSE)
 ```
 
 
@@ -438,12 +438,12 @@ DimPlot(seurat.phase,
 ```
 
 ```
-saveRDS(seurat.phase, "./outputs20K/seurat.phase.rds")
+saveRDS(seurat.phase, "./outputs20K/seurat.phase.cbo.rds")
 ```
 
 ```{r load_seuratObject}
 # load Seurat object
-seurat.phase <- readRDS("outputs20K/seurat.phase.rds")
+seurat.phase <- readRDS("outputs20K/seurat.phase.cbo.rds")
 ```
 
 ```{r SCTransform}
@@ -452,7 +452,7 @@ seurat.phase <- readRDS("outputs20K/seurat.phase.rds")
 cbo.filt.sct <- SCTransform(seurat.phase, method = "glmGamPoi", verbose = FALSE)
 ```
 
-```{r save_cbo_filtered_SCTransformed}
+```
 # Save the SCTransformed, filtered (cell- and gene-level) 'cbo' Seurat object
 saveRDS(cbo.filt.sct, "./outputs20K/cbo.filt.sct.rds")
 ```
@@ -480,7 +480,7 @@ DimPlot(cbo.filt.sct, label = TRUE) # '+ NoLegend()' is an option to insert here
 write.csv(cbo.filt.sct@meta.data, "./outputs20K/cbo.filt.sct.metadata.csv")
 ```
 
-```{r}
+```
 # saved the clustered 'cbo.filt.sct' Seurat object to the folder 'outputs20K'
 saveRDS(cbo.filt.sct, file = "./outputs20K/cbo.clusters.filt.sct.rds")
 ```
@@ -658,6 +658,211 @@ cluster10.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$c
   head(n=10)
 
 cluster10.markers.sct.table
+```
+
+
+```{r SCTransform_fullFiltered_seuratObject}
+#----------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------
+# 15 July 2022 - this clustering result generates same cell types as 'seurat.phase'
+# cluster the SCTransformed Seurat object as opposed to 'seurat.phase' object which has had cell cycle scoring and re-do the clustering and cell identity assignment
+# read the .rds file from 'outputs20K' folder - this object is both cell-filtered and gene-filtered
+
+filtered.cbo.seurat <- readRDS("outputs20K/filtered.cbo.seurat.rds")
+```
+
+```{r Plot1_UMAPclustering}
+# Perform SCTransform
+# Perform dimensionality reduction by PCA and UMAP embedding
+# FindClusters is run with only the default resolution parameter (= 0.8)
+# 11 clusters identified
+
+filtered.cbo.seurat <- SCTransform(filtered.cbo.seurat, method = "glmGamPoi", verbose = FALSE)
+
+filtered.cbo.seurat <- RunPCA(filtered.cbo.seurat, verbose = FALSE)
+
+filtered.cbo.seurat <- RunUMAP(filtered.cbo.seurat, dims = 1:30, verbose = FALSE)
+
+filtered.cbo.seurat <- FindNeighbors(filtered.cbo.seurat, dims = 1:30, verbose = FALSE)
+
+filtered.cbo.clusters.seurat <- FindClusters(filtered.cbo.seurat, verbose = FALSE)
+
+DimPlot(filtered.cbo.clusters.seurat, label = TRUE) # '+ NoLegend()' is an option to insert here
+```
+
+```r
+# saved the clustered 'filtered.cbo.clusters.seurat' Seurat object to the folder 'outputs20K'
+
+saveRDS(filtered.cbo.clusters.seurat, file = "./outputs20K/filtered.cbo.clusters.seurat.rds")
+```
+
+```{r differential_genes_by_cluster_cboSCT}
+# Find positive markers for each of the 10 clusters
+cbo.cluster.markers <- FindAllMarkers(filtered.cbo.clusters.seurat, min.pct = 0.25, only.pos = TRUE)
+```
+
+```{r}
+# saved the 'cbo.cluster.markers' object as csv file
+
+write.csv(cbo.cluster.markers, "./outputs20K/cbo.cluster.markers.csv", quote = F)
+```
+
+```{r load_cluster-markers_SCTobject}
+cbo.cluster.markers <- read.csv("outputs20K/cbo.cluster.markers.csv", header = TRUE, stringsAsFactors = FALSE)
+```
+
+```{r cluster0_size_cbo.cluster.markers}
+# cluster 0 size = 224 cells
+cluster0.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 0, ]
+nrow(cluster0.genes)
+```
+
+```{r cluster0_cbo.cluster.markers_top10markers}
+# cluster 0 = probable roof plate/choroid plexus
+cluster0.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 0, ] %>%
+  head(n=10)
+
+cluster0.markers
+```
+
+```{r cluster1_size_cbo.cluster.markers}
+# cluster 1 size = 561 cells
+cluster1.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 1, ]
+nrow(cluster1.genes)
+```
+
+```{r cluster1_cbo.cluster.markers_top10markers}
+# cluster 1 might be glia
+cluster1.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 1, ] %>%
+  head(n=10)
+
+cluster1.markers
+```
+
+```{r cluster2_size_cbo.cluster.markers}
+# cluster 2 size = 233 cells
+cluster2.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 2, ]
+nrow(cluster2.genes)
+```
+
+```{r cluster2_cbo.cluster.markers_top10markers}
+# cluster 2 might be 4th ventricle derivatives/choroid plexus (or Purkinje neurons)
+cluster2.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 2, ] %>%
+  head(n=10)
+
+cluster2.markers
+```
+
+```{r cluster3_size_cbo.cluster.markers}
+# cluster 3 size = 409 cells
+cluster3.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 3, ]
+nrow(cluster3.genes)
+```
+
+```{r cluster3_cbo.cluster.markers_top10markers}
+# cluster 3 could be inhibitory cerebellar nuclei/interneurons
+cluster3.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 3, ] %>%
+  head(n=10)
+
+cluster3.markers
+```
+
+```{r cluster4_size_cbo.cluster.markers}
+# cluster 4 size = 279 cells
+cluster4.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 4, ]
+nrow(cluster4.genes)
+```
+
+```{r cluster4_cbo.cluster.markers_top10markers}
+# cluster 4 could be microglia??
+cluster4.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 4, ] %>%
+  head(n=10)
+
+cluster4.markers
+```
+
+```{r cluster5_size_cbo.cluster.markers}
+# cluster 5 size = 65 cells
+cluster5.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 5, ]
+nrow(cluster5.genes)
+```
+
+```{r cluster5_cbo.cluster.markers_top10markers}
+# cluster 5 could be glial
+cluster5.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 5, ] %>%
+  head(n=10)
+
+cluster5.markers
+```
+
+```{r cluster6_size_cbo.cluster.markers}
+# cluster 6 size = 838 cells
+cluster6.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 6, ]
+nrow(cluster6.genes)
+```
+
+```{r cluster6_cbo.cluster.markers_top10markers}
+# cluster 6 most likely GCP/granule cells 
+cluster6.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 6, ] %>%
+  head(n=10)
+
+cluster6.markers
+```
+
+```{r cluster7_size_cbo.cluster.markers}
+# cluster 7 size = 559 cells
+cluster7.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 7, ]
+nrow(cluster7.genes)
+```
+
+```{r cluster7_cbo.cluster.markers_top10markers}
+# cluster 7 could be rhombic lip, GCP, proliferative granule cells
+cluster7.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 7, ] %>%
+  head(n=10)
+
+cluster7.markers
+```
+
+```{r cluster8_size_cbo.cluster.markers}
+# cluster 8 size = 725 cells
+cluster8.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 8, ]
+nrow(cluster8.genes)
+```
+
+```{r cluster8_cbo.cluster.markers_top10markers}
+# cluster 8 could be interneurons
+cluster8.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 8, ] %>%
+  head(n=10)
+
+cluster8.markers
+```
+
+```{r cluster9_size_cbo.cluster.markers}
+# cluster 9 size = 491 cells
+cluster9.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 9, ]
+nrow(cluster9.genes)
+```
+
+```{r cluster9_cbo.cluster.markers_top10markers}
+# cluster 9 likely glia
+cluster9.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 9, ] %>%
+  head(n=10)
+
+cluster9.markers
+```
+
+```{r cluster10_size_cbo.cluster.markers}
+# cluster 10 size = 945 cells
+cluster10.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 10, ]
+nrow(cluster10.genes)
+```
+
+```{r cluster10_cbo.cluster.markers_top10markers}
+# cluster 10 likely ependymal/multiciliated cells
+cluster10.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 10, ] %>%
+  head(n=10)
+
+cluster10.markers
 ```
 
 ```{r}
