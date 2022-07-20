@@ -80,7 +80,7 @@ table(tmp >= 3)
 keep <- tmp>=3                       # for each gene this states TRUE or FALSE
 
 tmp2 <- daoyCbo.data[keep, ]        # subset ons76cbo.data to keep only TRUE values, i.e. genes which 
-                                     # are expressed in 3 or more cells
+                                    # are expressed in 3 or more cells
 
 genes_in_3orMoreCells <- apply(tmp2, 2, function(x) sum(x > 0))   # for each cell, this counts the number 
                                                                   # of genes that cell expresses for all
@@ -328,22 +328,41 @@ dim(filtCellsGenes.daoyCbo.seurat)           # number of genes further reduced t
 saveRDS(filtCellsGenes.daoyCbo.seurat, file = "./outputs20K/filtCellsGenes.daoyCbo.seurat.rds")
 ```
 
-```{r}
-#--------------------------------------------------------------------------------------------
-#--------------------------------------------------------------------------------------------
-# EXPLORE SOURCES OF UNWANTED VARIATION, e.g. cell cycle
-```
-
-```{r load_filtered_CellsGenes_SeuratObject}
+```{r load_fullfiltered_CellsGenes_SeuratObject}
 # the name of this object reflects it has undergone filtering for cells AND genes
 
 fullFilt.daoyCbo.seurat <- readRDS("outputs20K/filtCellsGenes.daoyCbo.seurat.rds")
 ```
 
+```{r SCTransform}
+# apply the SCTransform algorithm
+
+fullFilt.daoyCbo.seurat <- SCTransform(fullFilt.daoyCbo.seurat, method = "glmGamPoi", verbose = FALSE)
+```
+
+```{r RunPCA}
+fullFilt.daoyCbo.seurat <- RunPCA(fullFilt.daoyCbo.seurat, verbose = FALSE)
+```
+
+```{r ElbowPlot_ndims=50}
+# elbow plot shows that there could be an elbow at PC 15, but the graph does not level off after
+# PC 15 showing there is some additional information to ~ PC 40. Maybe not too surprising given
+# the complexity and diversity of cell types in this sample.
+ElbowPlot(fullFilt.daoyCbo.seurat, ndims = 50, reduction = "pca")
+```
+
+
+
 ```{r normalize_fully_filtered_seuratObject}
 # standard normalization function is sufficient to explore whether cells cluster by cell-cycle phase
 
 seurat.phase <- NormalizeData(fullFilt.daoyCbo.seurat)
+```
+
+```{r}
+#--------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------
+# EXPLORE SOURCES OF UNWANTED VARIATION, e.g. cell cycle
 ```
 
 ```{r cellCycle_effects}
@@ -436,7 +455,8 @@ DimPlot(seurat.phase,
         split.by = "mito.prop")
 ```
 
-```{r}
+```
+# save the Seurat (seurat.phase) object
 saveRDS(seurat.phase, "./outputs20K/seurat.phase.daoyCbo.rds")
 ```
 
