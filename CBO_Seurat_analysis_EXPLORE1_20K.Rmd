@@ -44,10 +44,248 @@ dim(cbo.data)
 cbo <- CreateSeuratObject(counts = cbo.data)
 ```
 
+```{r load_filteredSeuratObject}
+# load the saved seurat object
+
+filtered.cbo.seurat <- readRDS("outputs20K/filtered.cbo.seurat.rds")
+```
+
+```{r normalize_scale}
+#--------------------------------------------------------------------------------------------
+# apply the traditional normalisation and scaling method before clustering and compare this
+# normalisation method to SCTransform
+# try resolution = 0.8 initially (the default, finds smaller number of clusters compared to res > 1)
+# Run non-linear dimensional reduction (UMAP)
+
+filtered.cbo.seurat <- NormalizeData(filtered.cbo.seurat)
+filtered.cbo.seurat <- FindVariableFeatures(filtered.cbo.seurat, 
+                                            selection.method = "vst", 
+                                            nfeatures = 2000)
+all.genes <- rownames(filtered.cbo.seurat)
+filtered.cbo.seurat <- ScaleData(filtered.cbo.seurat, features = all.genes)
+
+# only the previously determined variable features are used as input for RunPCA
+filtered.cbo.seurat <- RunPCA(filtered.cbo.seurat, 
+                              features = VariableFeatures(object = filtered.cbo.seurat))
+filtered.cbo.seurat <- FindNeighbors(filtered.cbo.seurat, dims = 1:10)
+filtered.cbo.seurat <- FindClusters(filtered.cbo.seurat, resolution = 0.8)
+```
+
+```{r Dimplot_normalize-scale}
+filtered.cbo.umap.seurat <- RunUMAP(filtered.cbo.seurat, dims = 1:10)
+plot <- DimPlot(filtered.cbo.umap.seurat, reduction = "umap")
+LabelClusters(plot = plot, id = "ident")
+```
+
+```
+# save the log normalized clustered Seurat object
+
+saveRDS(filtered.cbo.seurat, file = "./outputs20K/filt.cbo.logNorm.clusters.seurat.rds")
+```
+
+```{r load_logNorm_clustered_SeuratObject}
+filtered.cbo.seurat <- readRDS("outputs20K/filt.cbo.logNorm.clusters.seurat.rds")
+```
+
+
+```{r FeaturePlot_NeuroD1_CNTN2_PTCH1_HHIP_logNormalize_filtered.cbo.seurat}
+# GLI1 is barely expressed, whereas PTCH1, HHIP is weakly expressed in cluster6 (GCP lineage)
+# NEUROD1 marks cluster 6 and part of cluster 10 (both GCP lineage)
+# CNTN2 (TAG-1) in cluster 6 and part of cluster 10
+# NFIA is expressed in GCP lineage, but is non-specific
+
+FeaturePlot(filtered.cbo.seurat, features = c("NEUROD1", "CNTN2", "PTCH1", "HHIP"))
+```
+
+```{r VlnPlot_GCPlineage_logNormalize_filtered.cbo.seurat}
+# here I have plotted gene 'hits' following log normalization, as violin plots
+VlnPlot(filtered.cbo.seurat, features = c("PTCH1", "HHIP", "NEUROD1", "CNTN2", "SIX1", 
+                                          "CENPU", "BIRC5", "ASPM"))
+```
+
+
+```{r VlnPlot_GCPlineage_SCTransform_filtered.cbo.seurat}
+# here I have selected genes that are top 10 hits from the SCTransform analysis in
+# cluster 7 from code chunk on line 829 (r Plot1_SCTransform_UMAPclustering) 
+# and see if they are also enriched in the log normalized Seurat object (filtered.cbo.seurat).
+# Note that many genes in top 10 hits in SCTransform cluster 6 are also in top 10 of cluster 6
+# of log normalised seurat object, just in a different order. So, I've only selected genes
+# from SCTransform cluster 7 that are NOT in logNormalised clusters 6, 9, 10. These genes are 
+# expressed only in clusters 9, 10 of log normalized seurat object. 
+# Therefore, clusters 9 and 10 of log normalised seurat object are the same as cluster 7 
+# of SCTransformed seurat object.
+
+VlnPlot(filtered.cbo.seurat, features = c("NUSAP1", "TOP2A", "UBE2C"))
+```
+
+```{r}
+# Here I test whether unique genes in GCP clusters 9, 10 found in top 10 of the 
+# log Normalized seurat object are common to the enriched genes expressed in cluster 7 of 
+# SCTransformed seurat object (filt.cbo.sct.clusters). For this I chose two genes from
+# cluster 9 and two genes from cluster 10 of log normalized seurat object. All 4 genes
+# were also enriched in cluster 7 of SCTransformed seurat object.
+# Therefore cluster 7 of SCTransform seurat object is equivalent to clusters 9 and 10 of
+# log normalized seurat object.
+
+VlnPlot(filt.cbo.sct.clusters, features = c("PCLAF", "TYMS", "GTSE1", "CCNA2"))
+```
+
+
+
+```{r differential_genes_by_cluster_cbo_LogNorm}
+# Find positive markers for each of the  clusters
+cbo.logNorm.cluster.markers <- FindAllMarkers(filtered.cbo.seurat, min.pct = 0.25, only.pos = TRUE)
+```
+
+```
+# saved the cbo.logNorm.cluster.markers seurat object as csv file
+
+write.csv("./outputs20K/cbo.logNorm.cluster.markers.csv", quote = F))
+```
+
+```{r load_cbo.logNorm.cluster.markers}
+cluster.logNorm.markers <- read.csv("outputs20K/cbo.logNorm.cluster.markers.csv", 
+                                    header = TRUE, 
+                                    stringsAsFactors = FALSE)
+head(cluster.logNorm.markers)
+```
+
+```{r cell_counts_perCluster_LogNorm}
+# there are 2757 cells in total, which is correct, and the cell numbers per cluster are shown below.
+# Note the 'filtered.cbo.seurat' object is the FindClusters object NOT the RunUMAP object
+
+cell.num <- table(filtered.cbo.seurat@active.ident)
+cell.num
+sum(cell.num)
+```
+
+```{r cluster0_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster0 = 4th ventricle derivatives/choroid plexus
+
+cluster0.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 0, ] %>%
+  head(n=10)
+
+cluster0.markers.logNorm.table
+```
+
+```{r cluster1_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster1 = ?glia
+
+cluster1.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 1, ] %>%
+  head(n=10)
+
+cluster1.markers.logNorm.table
+```
+
+```{r cluster2_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster2 = roof plate/choroid plexus/ependyma
+
+cluster2.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 2, ] %>%
+  head(n=10)
+
+cluster2.markers.logNorm.table
+```
+
+```{r cluster3_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster3 = glia
+
+cluster3.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 3, ] %>%
+  head(n=10)
+
+cluster3.markers.logNorm.table
+```
+
+```{r cluster4_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster4 = inhibitory GABAergic cerebellar nuclei/interneurons/PN
+
+cluster4.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 4, ] %>%
+  head(n=10)
+
+cluster4.markers.logNorm.table
+```
+
+```{r cluster5_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster5 = unknown
+
+cluster5.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 5, ] %>%
+  head(n=10)
+
+cluster5.markers.logNorm.table
+```
+
+```{r cluster6_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster6 = GCP/granule neuron lineage
+
+cluster6.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 6, ] %>%
+  head(n=10)
+
+cluster6.markers.logNorm.table
+```
+
+```{r cluster7_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster7 = inhibitory GABAergic cerebellar nuclei/interneurons/PN
+
+cluster7.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 7, ] %>%
+  head(n=10)
+
+cluster7.markers.logNorm.table
+```
+
+```{r cluster8_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster8 = ?glia but lot of ribosomal proteins also
+
+cluster8.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 8, ] %>%
+  head(n=10)
+
+cluster8.markers.logNorm.table
+```
+
+```{r cluster9_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster9 = RL/GCP
+
+cluster9.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 9, ] %>%
+  head(n=10)
+
+cluster9.markers.logNorm.table
+```
+
+```{r cluster10_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster10 = RL/GCP lineage
+
+cluster10.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 10, ] %>%
+  head(n=10)
+
+cluster10.markers.logNorm.table
+```
+
+```{r cluster11_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster11 = ependymal/choroid plexus/multiciliated cells
+
+cluster11.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 11, ] %>%
+  head(n=10)
+
+cluster11.markers.logNorm.table
+```
+
+```{r cluster12_top10markers_logNorm}
+# Return top 10 markers for each cluster. cluster12 = glia
+
+cluster12.markers.logNorm.table <- cluster.logNorm.markers[cluster.logNorm.markers$cluster == 12, ] %>%
+  head(n=10)
+
+cluster12.markers.logNorm.table
+```
+
+
+
 ```{r sctransform_mitoch-regress}
+#------------------------------------------------------------------------------------------
+# THIS METHOD DOES NOT WORK AS WE STILL RETAIN CELLS WITH EXCESSIVE MITOCH EXPRESSION. 
 # Apply sctransform normalization - transformed data will be available in the SCT assay
 # During normalization, we can also remove confounding sources of variation, 
-# for example, mitochondrial mapping percentage
+# for example, mitochondrial mapping percentage - note that better to filter out percent mitochondrial reads, and regressing this variable out led to cell clusters with excessive percent mitochondrial expression.
+# Then find clusters and DEGs on the SCTransformed seurat object.
+
 
 # store mitochondrial percentage in object meta data
 
@@ -140,10 +378,12 @@ cluster0.markers.table <- cluster.markers[cluster.markers$cluster == 0, ] %>%
 cluster0.markers.table
 ```
 
-```{r cluster0_size}
-# cluster 0 size = 413 cells
-cluster0.markers <- cluster.markers[cluster.markers$cluster == 0, ]
-nrow(cluster0.markers)
+```{r cell_counts_perCluster}
+# there are  cells in total, which is correct, and the cell numbers per cluster are shown below.
+
+cell.num <- table(cbo@active.ident)
+cell.num
+sum(cell.num)
 ```
 
 
@@ -343,7 +583,6 @@ nrow(cluster11.markers)
 ```{r cluster12_top10markers}
 # Top 10 markers for cluster12. Cluster 12 top markers are only ribosomal genes, 
 # which indicates an artifact, so these cells should be excluded from further analysis
-#-------------------------------------------------------------------------------------
 cluster12.markers.table <- cluster.markers[cluster.markers$cluster == 12, ] %>%
   head(n=10)
 
@@ -361,8 +600,8 @@ nrow(cluster12.markers)
 ```{r}
 #--------------------------------------------------------------------------------------------
 #--------------------------------------------------------------------------------------------
-# EXPLORE SOURCES OF UNWANTED VARIATION
-## The above way of clustering CBO cells might not be correct, e.g. because of mitochondrial and
+# EXPLORE SOURCES OF UNWANTED VARIATION - cell cycle contribution to clustering?
+## The above way of clustering CBO cells is not correct, mainly because of mitochondrial and
 ## ribosomal DNA driving cluster identity which is an artifact.
 ```
 
@@ -415,7 +654,7 @@ DimPlot(seurat.phase,
         split.by = "Phase")
 ```
 
-```{r mitochondrial_expression}
+```{r mitochondrial_expression_seurat-phase}
 # Check quartile values
 summary(seurat.phase@meta.data$percent.mt)
 
@@ -425,7 +664,7 @@ seurat.phase@meta.data$mito.prop <- cut(seurat.phase@meta.data$percent.mt,
                    labels=c("Low","Medium","Medium high", "High"))
 ```
 
-```{r plot_mitochondrialExpression}
+```{r plot_mitochondrialExpression_seurat-phase}
 # repeat PCA and plot the PCA colored by mitochondrial percentage - this variable has no effect
 # on the clustering, just like cell-cycle phase
 seurat.phase <- RunPCA(seurat.phase)
@@ -441,12 +680,12 @@ DimPlot(seurat.phase,
 saveRDS(seurat.phase, "./outputs20K/seurat.phase.cbo.rds")
 ```
 
-```{r load_seuratObject}
+```{r load_seuratObject_seurat-phase}
 # load Seurat object
 seurat.phase <- readRDS("outputs20K/seurat.phase.cbo.rds")
 ```
 
-```{r SCTransform}
+```{r SCTransform_seurat-phase}
 # Apply SCTransform method on 'seurat.phase' to get new object. 
 # By default, after normalizing, adjusting the variance, and regressing out uninteresting sources of variation, SCTransform will rank the genes by residual variance and output the 3000 most variant genes.
 cbo.filt.sct <- SCTransform(seurat.phase, method = "glmGamPoi", verbose = FALSE)
@@ -457,11 +696,11 @@ cbo.filt.sct <- SCTransform(seurat.phase, method = "glmGamPoi", verbose = FALSE)
 saveRDS(cbo.filt.sct, "./outputs20K/cbo.filt.sct.rds")
 ```
 
-```{r load_CBOFiltSCT}
+```{r load_CBOFiltSCT_seurat-phase}
 cbo.filt.sct <- readRDS("outputs20K/cbo.filt.sct.rds")
 ```
 
-```{r Plot2_UMAPclustering}
+```{r Plot2_UMAPclustering_seurat-phase}
 # Perform dimensionality reduction by PCA and UMAP embedding
 # FindClusters is run with only the default resolution parameter (= 0.8)
 # 11 clusters identified
@@ -485,12 +724,12 @@ write.csv(cbo.filt.sct@meta.data, "./outputs20K/cbo.filt.sct.metadata.csv")
 saveRDS(cbo.filt.sct, file = "./outputs20K/cbo.clusters.filt.sct.rds")
 ```
 
-```{r load_clustered_seuratFiltSCT_object}
+```{r load_clustered_seuratFiltSCT_seurat-phase-object}
 # load the clustered, filtered (cell and gene level) Seurat object
 cbo.clusters.filt.sct <- readRDS("outputs20K/cbo.clusters.filt.sct.rds")
 ```
 
-```{r differential_genes_by_cluster_cboSCT}
+```{r differential_genes_by_cluster_cboSCT_seurat-phase}
 # Find positive markers for each of the 10 clusters
 cbo.sct.cluster.markers <- FindAllMarkers(cbo.clusters.filt.sct, min.pct = 0.25, only.pos = TRUE)
 ```
@@ -501,17 +740,12 @@ cbo.sct.cluster.markers <- FindAllMarkers(cbo.clusters.filt.sct, min.pct = 0.25,
 write.csv(cbo.sct.cluster.markers, "./outputs20K/cbo.sct.cluster.markers.csv", quote = F)
 ```
 
-```{r load_cluster-markers_SCTobject}
+```{r load_cluster-markers_SCTobject_seurat-phase}
 cbo.sct.cluster.markers <- read.csv("outputs20K/cbo.sct.cluster.markers.csv", header = TRUE, stringsAsFactors = FALSE)
 ```
 
-```{r cluster0_size_SCTobject}
-# cluster 0 size = 224 cells
-cluster0.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 0, ]
-nrow(cluster0.markers.sct)
-```
 
-```{r cluster0_SCT_top10markers}
+```{r cluster0_SCT_top10markers_seurat-phase}
 # Return top 10 markers for cluster 0. cluster 0 might be ROOF PLATE/CHOROID PLEXUS
 # ------------------------------------------------------------------------------------
 cluster0.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 0, ] %>%
@@ -520,13 +754,8 @@ cluster0.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster0.markers.sct.table
 ```
 
-```{r cluster1_size_SCTobject}
-# cluster 1 size = 561 cells
-cluster1.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 1, ]
-nrow(cluster1.markers.sct)
-```
 
-```{r cluster1_SCT_top10markers}
+```{r cluster1_SCT_top10markers_seurat-phase}
 # cluster 1 might be (micro)glia
 cluster1.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 1, ] %>%
   head(n=10)
@@ -534,13 +763,7 @@ cluster1.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster1.markers.sct.table
 ```
 
-```{r cluster2_size_SCTobject}
-# cluster 2 size = 233 cells
-cluster2.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 2, ]
-nrow(cluster2.markers.sct)
-```
-
-```{r cluster2_SCT_top10markers}
+```{r cluster2_SCT_top10markers_seurat-phase}
 # cluster 2 might be PN or 4th ventricle derivatives/choroid plexus
 cluster2.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 2, ] %>%
   head(n=10)
@@ -548,13 +771,7 @@ cluster2.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster2.markers.sct.table
 ```
 
-```{r cluster3_size_SCTobject}
-# cluster 3 size = 233 cells
-cluster3.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 3, ]
-nrow(cluster3.markers.sct)
-```
-
-```{r cluster3_SCT_top10markers}
+```{r cluster3_SCT_top10markers_seurat-phase}
 # cluster 3 could be inhibitory cerebellar nuclei/interneurons
 cluster3.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 3, ] %>%
   head(n=10)
@@ -562,13 +779,8 @@ cluster3.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster3.markers.sct.table
 ```
 
-```{r cluster4_size_SCTobject}
-# cluster 4 size = 279 cells
-cluster4.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 4, ]
-nrow(cluster4.markers.sct)
-```
 
-```{r cluster4_SCT_top10markers}
+```{r cluster4_SCT_top10markers_seurat-phase}
 # cluster 4 could be glia
 cluster4.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 4, ] %>%
   head(n=10)
@@ -576,13 +788,7 @@ cluster4.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster4.markers.sct.table
 ```
 
-```{r cluster5_size_SCTobject}
-# cluster 5 size = 65 cells
-cluster5.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 5, ]
-nrow(cluster5.markers.sct)
-```
-
-```{r cluster5_SCT_top10markers}
+```{r cluster5_SCT_top10markers_seurat-phase}
 # cluster 5 could be glia
 cluster5.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 5, ] %>%
   head(n=10)
@@ -590,13 +796,7 @@ cluster5.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster5.markers.sct.table
 ```
 
-```{r cluster6_size_SCTobject}
-# cluster 6 size = 838 cells
-cluster6.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 6, ]
-nrow(cluster6.markers.sct)
-```
-
-```{r cluster6_SCT_top10markers}
+```{r cluster6_SCT_top10markers_seurat-phase}
 # cluster 6 likely Granule neurons, GCP
 cluster6.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 6, ] %>%
   head(n=10)
@@ -604,13 +804,7 @@ cluster6.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster6.markers.sct.table
 ```
 
-```{r cluster7_size_SCTobject}
-# cluster 7 size = 559 cells
-cluster7.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 7, ]
-nrow(cluster7.markers.sct)
-```
-
-```{r cluster7_SCT_top10markers}
+```{r cluster7_SCT_top10markers_seurat-phase}
 # cluster 7 are GCP, granule cells
 cluster7.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 7, ] %>%
   head(n=10)
@@ -618,13 +812,7 @@ cluster7.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster7.markers.sct.table
 ```
 
-```{r cluster8_size_SCTobject}
-# cluster 8 size = 725 cells
-cluster8.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 8, ]
-nrow(cluster8.markers.sct)
-```
-
-```{r cluster8_SCT_top10markers}
+```{r cluster8_SCT_top10markers_seurat-phase}
 # cluster 8 could be PN - uncertain!
 cluster8.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 8, ] %>%
   head(n=10)
@@ -632,13 +820,7 @@ cluster8.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster8.markers.sct.table
 ```
 
-```{r cluster9_size_SCTobject}
-# cluster 9 size = 491 cells
-cluster9.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 9, ]
-nrow(cluster9.markers.sct)
-```
-
-```{r cluster9_SCT_top10markers}
+```{r cluster9_SCT_top10markers_seurat-phase}
 # cluster 9 are glial cells (OPC, oligodendrocytes, BG) 
 cluster9.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 9, ] %>%
   head(n=10)
@@ -646,13 +828,7 @@ cluster9.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cl
 cluster9.markers.sct.table
 ```
 
-```{r cluster10_size_SCTobject}
-# cluster 10 size = 945 cells
-cluster10.markers.sct <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 10, ]
-nrow(cluster10.markers.sct)
-```
-
-```{r cluster10_SCT_top10markers}
+```{r cluster10_SCT_top10markers_seurat-phase}
 # cluster 10 are  
 cluster10.markers.sct.table <- cbo.sct.cluster.markers[cbo.sct.cluster.markers$cluster == 10, ] %>%
   head(n=10)
@@ -664,14 +840,14 @@ cluster10.markers.sct.table
 ```{r SCTransform_fullFiltered_seuratObject}
 #----------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------
-# 15 July 2022 - this clustering result generates same cell types as 'seurat.phase'
+# 15 July 2022 - the clustering result below generates same cell types as 'seurat.phase'
 # cluster the SCTransformed Seurat object as opposed to 'seurat.phase' object which has had cell cycle scoring and re-do the clustering and cell identity assignment
 # read the .rds file from 'outputs20K' folder - this object is both cell-filtered and gene-filtered
 
 filtered.cbo.seurat <- readRDS("outputs20K/filtered.cbo.seurat.rds")
 ```
 
-```{r Plot1_UMAPclustering}
+```{r Plot1_SCTransform_UMAPclustering}
 # Perform SCTransform
 # Perform dimensionality reduction by PCA and UMAP embedding
 # FindClusters is run with only the default resolution parameter (= 0.8)
@@ -696,12 +872,32 @@ DimPlot(filtered.cbo.clusters.seurat, label = TRUE) # '+ NoLegend()' is an optio
 saveRDS(filtered.cbo.clusters.seurat, file = "./outputs20K/filtered.cbo.clusters.seurat.rds")
 ```
 
+```{r load_SCTransform_SeuratObject}
+filt.cbo.sct.clusters <- readRDS("outputs20K/filtered.cbo.clusters.seurat.rds")
+```
+
+```{r FeaturePlot_GCPlineage_genes_filt.cbo.sct.clusters_SCTransform}
+FeaturePlot(filt.cbo.sct.clusters, features = c("NEUROD1", "PTCH1", "CNTN2"))
+```
+
+
+
 ```{r differential_genes_by_cluster_cboSCT}
 # Find positive markers for each of the 10 clusters
 cbo.cluster.markers <- FindAllMarkers(filtered.cbo.clusters.seurat, min.pct = 0.25, only.pos = TRUE)
 ```
 
-```{r}
+
+```{r cell_counts_perCluster}
+# there are 2757 cells in total, which is correct, and the cell numbers per cluster are shown below.
+# several clusters are present with < 100 cells
+
+cell.num <- table(filtered.cbo.clusters.seurat@active.ident)
+cell.num
+sum(cell.num)
+```
+
+```
 # saved the 'cbo.cluster.markers' object as csv file
 
 write.csv(cbo.cluster.markers, "./outputs20K/cbo.cluster.markers.csv", quote = F)
@@ -709,12 +905,6 @@ write.csv(cbo.cluster.markers, "./outputs20K/cbo.cluster.markers.csv", quote = F
 
 ```{r load_cluster-markers_SCTobject}
 cbo.cluster.markers <- read.csv("outputs20K/cbo.cluster.markers.csv", header = TRUE, stringsAsFactors = FALSE)
-```
-
-```{r cluster0_size_cbo.cluster.markers}
-# cluster 0 size = 224 cells
-cluster0.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 0, ]
-nrow(cluster0.genes)
 ```
 
 ```{r cluster0_cbo.cluster.markers_top10markers}
@@ -725,24 +915,12 @@ cluster0.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 0, ] %>%
 cluster0.markers
 ```
 
-```{r cluster1_size_cbo.cluster.markers}
-# cluster 1 size = 561 cells
-cluster1.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 1, ]
-nrow(cluster1.genes)
-```
-
 ```{r cluster1_cbo.cluster.markers_top10markers}
 # cluster 1 might be glia
 cluster1.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 1, ] %>%
   head(n=10)
 
 cluster1.markers
-```
-
-```{r cluster2_size_cbo.cluster.markers}
-# cluster 2 size = 233 cells
-cluster2.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 2, ]
-nrow(cluster2.genes)
 ```
 
 ```{r cluster2_cbo.cluster.markers_top10markers}
@@ -753,24 +931,12 @@ cluster2.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 2, ] %>%
 cluster2.markers
 ```
 
-```{r cluster3_size_cbo.cluster.markers}
-# cluster 3 size = 409 cells
-cluster3.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 3, ]
-nrow(cluster3.genes)
-```
-
 ```{r cluster3_cbo.cluster.markers_top10markers}
 # cluster 3 could be inhibitory cerebellar nuclei/interneurons
 cluster3.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 3, ] %>%
   head(n=10)
 
 cluster3.markers
-```
-
-```{r cluster4_size_cbo.cluster.markers}
-# cluster 4 size = 279 cells
-cluster4.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 4, ]
-nrow(cluster4.genes)
 ```
 
 ```{r cluster4_cbo.cluster.markers_top10markers}
@@ -781,24 +947,12 @@ cluster4.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 4, ] %>%
 cluster4.markers
 ```
 
-```{r cluster5_size_cbo.cluster.markers}
-# cluster 5 size = 65 cells
-cluster5.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 5, ]
-nrow(cluster5.genes)
-```
-
 ```{r cluster5_cbo.cluster.markers_top10markers}
 # cluster 5 could be glial
 cluster5.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 5, ] %>%
   head(n=10)
 
 cluster5.markers
-```
-
-```{r cluster6_size_cbo.cluster.markers}
-# cluster 6 size = 838 cells
-cluster6.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 6, ]
-nrow(cluster6.genes)
 ```
 
 ```{r cluster6_cbo.cluster.markers_top10markers}
@@ -809,24 +963,12 @@ cluster6.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 6, ] %>%
 cluster6.markers
 ```
 
-```{r cluster7_size_cbo.cluster.markers}
-# cluster 7 size = 559 cells
-cluster7.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 7, ]
-nrow(cluster7.genes)
-```
-
 ```{r cluster7_cbo.cluster.markers_top10markers}
 # cluster 7 could be rhombic lip, GCP, proliferative granule cells
 cluster7.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 7, ] %>%
   head(n=10)
 
 cluster7.markers
-```
-
-```{r cluster8_size_cbo.cluster.markers}
-# cluster 8 size = 725 cells
-cluster8.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 8, ]
-nrow(cluster8.genes)
 ```
 
 ```{r cluster8_cbo.cluster.markers_top10markers}
@@ -837,24 +979,12 @@ cluster8.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 8, ] %>%
 cluster8.markers
 ```
 
-```{r cluster9_size_cbo.cluster.markers}
-# cluster 9 size = 491 cells
-cluster9.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 9, ]
-nrow(cluster9.genes)
-```
-
 ```{r cluster9_cbo.cluster.markers_top10markers}
 # cluster 9 likely glia
 cluster9.markers <- cbo.cluster.markers[cbo.cluster.markers$cluster == 9, ] %>%
   head(n=10)
 
 cluster9.markers
-```
-
-```{r cluster10_size_cbo.cluster.markers}
-# cluster 10 size = 945 cells
-cluster10.genes <- cbo.cluster.markers[cbo.cluster.markers$cluster == 10, ]
-nrow(cluster10.genes)
 ```
 
 ```{r cluster10_cbo.cluster.markers_top10markers}
